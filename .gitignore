@@ -15,3 +15,6 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Explicitly ignore local env for frontend
+shop_frontend/.env.local
