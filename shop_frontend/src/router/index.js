@@ -22,12 +22,14 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
+      meta: { title: 'Opusio' },
     },
     {
       path: '/product/:id',
       name: 'product',
       component: ProductView,
       props: true,
+      // title set dynamically by ProductView once product loads
     },
     {
       path: '/about',
@@ -36,21 +38,61 @@ const router = createRouter({
       // this generates a separate chunk (About.[hash].js) for this route
       // which is lazy-loaded when the route is visited.
       component: () => import('../views/AboutView.vue'),
+      meta: { title: 'About — Opusio' },
     },
     {
       path: '/cart',
       name: 'cart',
       component: () => import('../views/CartView.vue'),
+      meta: { title: 'Shopping Bag — Opusio' },
     },
     {
       path: '/wishlist',
       name: 'wishlist',
       component: () => import('../views/WishlistView.vue'),
+      meta: { title: 'Wishlist — Opusio' },
     },
     {
       path: '/auth',
       name: 'auth',
       component: AuthView,
+      meta: { title: 'Sign In — Opusio' },
+    },
+    {
+      path: '/auth/callback',
+      name: 'auth-callback',
+      component: () => import('@/views/AuthCallbackView.vue'),
+      meta: { title: 'Opusio' },
+    },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: { requiresAuth: true, title: 'My Account — Opusio' },
+    },
+    {
+      path: '/checkout',
+      name: 'checkout',
+      component: () => import('@/views/CheckoutView.vue'),
+      meta: { requiresAuth: true, title: 'Checkout — Opusio' },
+    },
+    {
+      path: '/order/:id',
+      name: 'order-confirm',
+      component: () => import('@/views/OrderConfirmView.vue'),
+      meta: { requiresAuth: true, title: 'Order Confirmed — Opusio' },
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue'),
+      meta: { title: 'Page Not Found — Opusio' },
+    },
+    {
+      path: '/contact',
+      name: 'contact',
+      component: () => import('@/views/ContactView.vue'),
+      meta: { title: 'Contact — Opusio' },
     },
   ],
 })
@@ -63,13 +105,19 @@ router.beforeEach(async (to) => {
   if (!auth.user && !auth.loading) {
     try {
       await auth.init()
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
 
   if (to.meta && to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'auth', query: { redirect: to.fullPath } }
+  }
+})
+
+router.afterEach((to) => {
+  if (to.meta?.title) {
+    document.title = to.meta.title
   }
 })
 
