@@ -55,7 +55,7 @@
                 </div>
                 <div class="result-info">
                   <div class="result-name">{{ product.name }}</div>
-                  <div class="result-meta">{{ product.material || product.category || '' }}</div>
+                  <div class="result-meta">{{ product.category || '' }}</div>
                 </div>
                 <div class="result-price">{{ formatPrice(product) }}</div>
               </li>
@@ -122,7 +122,6 @@ const results = computed(() => {
     .filter((p) => {
       return (
         p.name?.toLowerCase().includes(q) ||
-        p.material?.toLowerCase().includes(q) ||
         p.collection?.toLowerCase().includes(q) ||
         p.category?.toLowerCase().includes(q) ||
         p.description?.toLowerCase().includes(q)
@@ -131,24 +130,37 @@ const results = computed(() => {
     .slice(0, 12)
 })
 
+function firstActiveVariant(product) {
+  return (product.product_variants ?? []).find((v) => v.is_active) ?? null
+}
+
 function resultImage(product) {
+  const v = firstActiveVariant(product)
+  if (v?.image_url) return v.image_url
+  // fallback: product-level images kept as SEO/hero fallback
   if (product.image_url) return product.image_url
   if (Array.isArray(product.images) && product.images.length) return product.images[0]
   return ''
 }
 
-function formatPrice(p) {
-  let cents =
-    p?.price_cents != null ? Number(p.price_cents) : p?.price != null ? Number(p.price) * 100 : null
-  if (cents == null || isNaN(cents)) return ''
+function formatPrice(product) {
+  const vs = (product.product_variants ?? []).filter((v) => v.is_active)
+  const cents = vs.length
+    ? Math.min(...vs.map((v) => v.price_cents).filter((c) => c != null))
+    : null
+  if (cents == null || !isFinite(cents)) return ''
+  const prefix = vs.length > 1 ? 'from ' : ''
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-    }).format(cents / 100)
+    return (
+      prefix +
+      new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+      }).format(cents / 100)
+    )
   } catch {
-    return `€${(cents / 100).toFixed(2)}`
+    return `${prefix}€${(cents / 100).toFixed(2)}`
   }
 }
 

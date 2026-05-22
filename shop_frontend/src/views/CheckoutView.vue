@@ -118,19 +118,22 @@
           <h2 class="summary-title">ORDER SUMMARY</h2>
 
           <ul class="summary-lines">
-            <li v-for="item in items" :key="item.product.id" class="summary-line">
+            <li v-for="item in items" :key="item.variant.id" class="summary-line">
               <div class="summary-line-img-wrap">
                 <img
-                  :src="lineImage(item.product)"
-                  :alt="item.product.name"
+                  :src="item.variant.image_url || item.product?.image_url || ''"
+                  :alt="item.product?.name"
                   class="summary-line-img"
                 />
                 <span class="summary-line-qty">{{ item.quantity }}</span>
               </div>
               <div class="summary-line-info">
-                <div class="summary-line-name">{{ item.product.name }}</div>
-                <div v-if="item.product.material" class="summary-line-meta">
-                  {{ item.product.material }}
+                <div class="summary-line-name">{{ item.product?.name }}</div>
+                <div
+                  v-if="item.variant.material_color || item.variant.size"
+                  class="summary-line-meta"
+                >
+                  {{ [item.variant.material_color, item.variant.size].filter(Boolean).join(' · ') }}
                 </div>
               </div>
               <div class="summary-line-price">{{ linePrice(item) }}</div>
@@ -216,11 +219,7 @@ const totalFormatted = computed(() => {
 })
 
 function linePrice(item) {
-  const p = item.product
-  let cents =
-    p?.price_cents != null ? Number(p.price_cents) : p?.price != null ? Number(p.price) * 100 : null
-  if (cents == null || isNaN(cents)) return ''
-  const amount = (cents / 100) * item.quantity
+  const amount = (item.variant.price_cents / 100) * item.quantity
   try {
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
@@ -230,12 +229,6 @@ function linePrice(item) {
   } catch {
     return `€${amount.toFixed(2)}`
   }
-}
-
-function lineImage(product) {
-  if (product.image_url) return product.image_url
-  if (Array.isArray(product.images) && product.images.length) return product.images[0]
-  return ''
 }
 
 function validate() {
@@ -265,13 +258,13 @@ function parseOrderError(message) {
   if (message.includes('INSUFFICIENT_STOCK')) {
     return 'One or more items in your bag no longer have sufficient stock. Please review your bag and try again.'
   }
-  if (message.includes('PRODUCT_UNAVAILABLE')) {
+  if (message.includes('VARIANT_UNAVAILABLE') || message.includes('PRODUCT_UNAVAILABLE')) {
     return 'One or more items in your bag are no longer available. Please review your bag.'
   }
-  if (message.includes('PRODUCT_NOT_FOUND')) {
+  if (message.includes('VARIANT_NOT_FOUND')) {
     return 'One or more items could not be found. Please refresh and try again.'
   }
-  if (message.includes('PRODUCT_PRICE_MISSING')) {
+  if (message.includes('VARIANT_PRICE_MISSING')) {
     return 'One or more items are missing a price. Please contact support.'
   }
   if (message.includes('INVALID_QUANTITY')) {
@@ -310,7 +303,7 @@ async function placeOrder() {
     }
 
     const result = await ordersStore.createOrder({
-      items: items.value,
+      items: items.value.map((i) => ({ variant_id: i.variant.id, quantity: i.quantity })),
       shippingAddress,
     })
 

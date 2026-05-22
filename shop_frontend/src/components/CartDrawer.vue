@@ -18,44 +18,41 @@
       <!-- scrollable body -->
       <div class="drawer-body">
         <div v-if="items.length" class="items-list">
-          <div v-for="item in items" :key="item.product.id" class="drawer-item">
-            <button class="item-remove" @click="remove(item.product.id)" aria-label="Remove item">
+          <div v-for="item in items" :key="item.variant.id" class="drawer-item">
+            <button class="item-remove" @click="remove(item.variant.id)" aria-label="Remove item">
               ×
             </button>
             <div class="item-media">
-              <img :src="firstImage(item.product)" alt="" class="item-img" />
+              <img
+                :src="item.variant.image_url || item.product?.image_url || ''"
+                alt=""
+                class="item-img"
+              />
             </div>
             <div class="item-details">
-              <div class="item-name">{{ item.product.name }}</div>
-              <div v-if="item.product.description" class="item-desc">
-                {{ item.product.description }}
-              </div>
-              <div v-if="item.product.material" class="item-attr">{{ item.product.material }}</div>
-              <div v-if="item.product.collection" class="item-attr">
-                {{ item.product.collection }}
+              <div class="item-name">{{ item.product?.name }}</div>
+              <div v-if="item.variant.material_color || item.variant.size" class="item-attr">
+                {{ [item.variant.material_color, item.variant.size].filter(Boolean).join(' · ') }}
               </div>
               <div
-                v-if="item.product.stock_quantity != null && item.product.stock_quantity <= 5"
+                v-if="item.variant.stock_quantity != null && item.variant.stock_quantity <= 5"
                 class="item-stock-warn"
               >
-                Only {{ item.product.stock_quantity }} left
+                Only {{ item.variant.stock_quantity }} left
               </div>
               <div class="item-bottom">
                 <div class="item-qty">
-                  <button class="qty-btn" @click="decrement(item.product.id)">−</button>
+                  <button class="qty-btn" @click="decrement(item.variant.id)">−</button>
                   <span class="qty-val">{{ item.quantity }}</span>
                   <button
                     class="qty-btn"
-                    :disabled="
-                      item.product.stock_quantity != null &&
-                      item.quantity >= item.product.stock_quantity
-                    "
-                    @click="increment(item.product.id)"
+                    :disabled="item.quantity >= item.variant.stock_quantity"
+                    @click="increment(item.variant.id)"
                   >
                     +
                   </button>
                 </div>
-                <div class="item-price">{{ formatCurrency(productPrice(item.product)) }}</div>
+                <div class="item-price">{{ formatCurrency(item.variant.price_cents / 100) }}</div>
               </div>
             </div>
           </div>
@@ -122,31 +119,14 @@ function formatCurrency(value) {
   }
 }
 
-function productPrice(p) {
-  if (!p) return 0
-  if (p.price_cents != null) return Number(p.price_cents) / 100
-  if (p.price != null) return Number(p.price)
-  return 0
+function increment(variantId) {
+  cart.increment(variantId)
 }
-
-function firstImage(p) {
-  if (!p) return ''
-  const arr =
-    (Array.isArray(p.images) && p.images) || (Array.isArray(p.image_urls) && p.image_urls) || []
-  if (arr.length) return arr[0]
-  return p.image_url || ''
+function decrement(variantId) {
+  cart.decrement(variantId)
 }
-
-function increment(id) {
-  cart.increment(id)
-}
-
-function decrement(id) {
-  cart.decrement(id)
-}
-
-function remove(id) {
-  cart.remove(id)
+function remove(variantId) {
+  cart.remove(variantId)
 }
 
 function goCheckout() {

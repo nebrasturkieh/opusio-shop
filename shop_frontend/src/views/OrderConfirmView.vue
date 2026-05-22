@@ -23,18 +23,18 @@
           <section class="confirm-section">
             <h2 class="confirm-section-title">ITEMS ORDERED</h2>
             <ul class="confirm-lines">
-              <li v-for="item in order.items_snapshot" :key="item.product.id" class="confirm-line">
+              <li v-for="item in order.items_snapshot" :key="item.variant_id" class="confirm-line">
                 <div class="confirm-line-img-wrap">
                   <img
-                    :src="lineImage(item.product)"
-                    :alt="item.product.name"
+                    :src="item.image_url || ''"
+                    :alt="item.product_name"
                     class="confirm-line-img"
                   />
                 </div>
                 <div class="confirm-line-info">
-                  <div class="confirm-line-name">{{ item.product.name }}</div>
-                  <div v-if="item.product.material" class="confirm-line-meta">
-                    {{ item.product.material }}
+                  <div class="confirm-line-name">{{ item.product_name }}</div>
+                  <div v-if="item.material_color || item.size" class="confirm-line-meta">
+                    {{ [item.material_color, item.size].filter(Boolean).join(' · ') }}
                   </div>
                   <div class="confirm-line-qty">Qty: {{ item.quantity }}</div>
                 </div>
@@ -139,10 +139,9 @@ const totalFormatted = computed(() => {
 })
 
 function linePrice(item) {
-  // Prefer server-verified line_total_cents stored in enriched snapshot
   const cents =
     item.line_total_cents ??
-    (item.product?.price_cents != null ? Number(item.product.price_cents) * item.quantity : null)
+    (item.unit_price_cents != null ? item.unit_price_cents * item.quantity : null)
   if (cents == null || isNaN(cents)) return ''
   const amount = Number(cents) / 100
   try {
@@ -154,12 +153,6 @@ function linePrice(item) {
   } catch {
     return `€${amount.toFixed(2)}`
   }
-}
-
-function lineImage(product) {
-  if (product.image_url) return product.image_url
-  if (Array.isArray(product.images) && product.images.length) return product.images[0]
-  return ''
 }
 </script>
 

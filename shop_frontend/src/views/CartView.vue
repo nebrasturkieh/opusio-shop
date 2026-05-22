@@ -18,61 +18,56 @@
       <div v-if="items && items.length" class="cart-body">
         <!-- Line items -->
         <div class="cart-lines">
-          <article v-for="item in items" :key="item.product.id" class="cart-line">
+          <article v-for="item in items" :key="item.variant.id" class="cart-line">
             <button
               class="cart-line-remove"
               type="button"
               aria-label="Remove"
-              @click="remove(item.product.id)"
+              @click="remove(item.variant.id)"
             >
               ×
             </button>
 
             <div class="cart-line-media">
-              <img :src="lineImage(item.product)" :alt="item.product.name" class="cart-line-img" />
+              <img
+                :src="item.variant.image_url || item.product?.image_url || ''"
+                :alt="item.product?.name"
+                class="cart-line-img"
+              />
             </div>
 
             <div class="cart-line-info">
-              <div class="cart-line-name">{{ item.product.name }}</div>
-              <div v-if="item.product.description" class="cart-line-desc">
-                {{ item.product.description }}
-              </div>
-              <div v-if="item.product.material" class="cart-line-attr">
-                {{ item.product.material }}
-              </div>
-              <div v-if="item.product.collection" class="cart-line-attr">
-                {{ item.product.collection }}
+              <div class="cart-line-name">{{ item.product?.name }}</div>
+              <div v-if="item.variant.material_color || item.variant.size" class="cart-line-attr">
+                {{ [item.variant.material_color, item.variant.size].filter(Boolean).join(' · ') }}
               </div>
 
               <div class="cart-line-bottom">
                 <div class="cart-qty">
-                  <button class="cart-qty-btn" type="button" @click="decrement(item.product.id)">
+                  <button class="cart-qty-btn" type="button" @click="decrement(item.variant.id)">
                     −
                   </button>
                   <span class="cart-qty-val">{{ item.quantity }}</span>
                   <button
                     class="cart-qty-btn"
                     type="button"
-                    :disabled="
-                      item.product.stock_quantity != null &&
-                      item.quantity >= item.product.stock_quantity
-                    "
-                    @click="increment(item.product.id)"
+                    :disabled="item.quantity >= item.variant.stock_quantity"
+                    @click="increment(item.variant.id)"
                   >
                     +
                   </button>
                 </div>
-                <div class="cart-line-price">{{ formatPrice(item.product, item.quantity) }}</div>
+                <div class="cart-line-price">{{ linePrice(item) }}</div>
               </div>
               <p
                 v-if="
-                  item.product.stock_quantity != null &&
-                  item.product.stock_quantity <= 5 &&
-                  item.product.stock_quantity > 0
+                  item.variant.stock_quantity != null &&
+                  item.variant.stock_quantity <= 5 &&
+                  item.variant.stock_quantity > 0
                 "
                 class="cart-stock-warn"
               >
-                Only {{ item.product.stock_quantity }} left
+                Only {{ item.variant.stock_quantity }} left
               </p>
             </div>
           </article>
@@ -141,6 +136,16 @@ onMounted(() => {
   cart.closeDrawer()
 })
 
+function remove(variantId) {
+  cart.remove(variantId)
+}
+function increment(variantId) {
+  cart.increment(variantId)
+}
+function decrement(variantId) {
+  cart.decrement(variantId)
+}
+
 function goToCheckout() {
   if (!auth.isAuthenticated) {
     router.push({ name: 'auth', query: { redirect: '/checkout' } })
@@ -149,44 +154,29 @@ function goToCheckout() {
   router.push({ name: 'checkout' })
 }
 
-const totalPriceFormatted = computed(() =>
-  formatPrice({ price_cents: totalPrice.value * 100, currency: 'EUR' }),
-)
+const totalPriceFormatted = computed(() => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 2,
+    }).format(totalPrice.value)
+  } catch {
+    return `€${totalPrice.value.toFixed(2)}`
+  }
+})
 
-function lineImage(product) {
-  if (product.image_url) return product.image_url
-  if (Array.isArray(product.images) && product.images.length) return product.images[0]
-  return ''
-}
-
-function formatPrice(p, qty = 1) {
-  if (!p) return ''
-  let cents = null
-  if (p.price_cents != null) cents = Number(p.price_cents)
-  else if (p.price != null) cents = Number(p.price) * 100
-  if (cents == null || isNaN(cents)) return ''
-  const amount = (cents / 100) * qty
-  if (isNaN(amount)) return ''
+function linePrice(item) {
+  const amount = (item.variant.price_cents / 100) * item.quantity
   try {
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 2,
     }).format(amount)
-  } catch (e) {
-    console.warn('Currency format error:', e)
+  } catch {
     return `€${amount.toFixed(2)}`
   }
-}
-
-function increment(id) {
-  cart.increment(id)
-}
-function decrement(id) {
-  cart.decrement(id)
-}
-function remove(id) {
-  cart.remove(id)
 }
 </script>
 

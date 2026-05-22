@@ -12,29 +12,16 @@ const cart = useCartStore()
 const id = computed(() => String(route.params.id ?? ''))
 const quantity = ref(1)
 
-// Reset qty when product changes
 watch(id, () => {
   quantity.value = 1
 })
 
-// Stock helpers
-const stockQty = computed(() => {
-  const s = product.value?.stock_quantity
-  return s == null ? Infinity : Number(s)
-})
-const inStock = computed(() => stockQty.value > 0)
-const lowStock = computed(
-  () => stockQty.value !== Infinity && stockQty.value <= 5 && stockQty.value > 0,
-)
-
-// Ensure we have products if user opens /product/:id directly
 onMounted(async () => {
   if (!productsStore.activeItems?.length) {
     await productsStore.fetchProducts()
   }
 })
 
-// Find product
 const product = computed(() =>
   (productsStore.activeItems || []).find((p) => String(p.id) === id.value),
 )
@@ -47,12 +34,78 @@ watch(
   { immediate: true },
 )
 
+// ── Variants ──────────────────────────────────────────────────────────────
+const variants = computed(() => (product.value?.product_variants ?? []).filter((v) => v.is_active))
+
+const availableColors = computed(() => {
+  const seen = new Set()
+  return variants.value.map((v) => v.material_color).filter((c) => c && !seen.has(c) && seen.add(c))
+})
+
+const hasColorDimension = computed(() => availableColors.value.length > 1)
+const hasSizeDimension = computed(
+  () => new Set(variants.value.map((v) => v.size).filter(Boolean)).size > 1,
+)
+
+const selectedColor = ref(null)
+const selectedSize = ref(null)
+
+// Auto-select options from first active variant when product loads
+watch(
+  variants,
+  (vs) => {
+    if (vs.length) {
+      selectedColor.value = vs[0].material_color ?? null
+      selectedSize.value = vs[0].size ?? null
+    }
+  },
+  { immediate: true },
+)
+
+// Sizes available for the currently selected color
+const availableSizes = computed(() => {
+  const seen = new Set()
+  const pool = hasColorDimension.value
+    ? variants.value.filter((v) => v.material_color === selectedColor.value)
+    : variants.value
+  return pool.map((v) => v.size).filter((s) => s && !seen.has(s) && seen.add(s))
+})
+
+// When color changes, snap size to first available for that color
+watch(selectedColor, () => {
+  if (availableSizes.value.length && !availableSizes.value.includes(selectedSize.value)) {
+    selectedSize.value = availableSizes.value[0]
+  }
+})
+
+const selectedVariant = computed(() => {
+  const vs = variants.value
+  if (!vs.length) return null
+  const exact = vs.find(
+    (v) =>
+      (v.material_color ?? null) === (selectedColor.value ?? null) &&
+      (v.size ?? null) === (selectedSize.value ?? null),
+  )
+  return (
+    exact ?? vs.find((v) => (v.material_color ?? null) === (selectedColor.value ?? null)) ?? vs[0]
+  )
+})
+
+// ── Stock ──────────────────────────────────────────────────────────────────
+const stockQty = computed(() => {
+  const s = selectedVariant.value?.stock_quantity
+  return s == null ? Infinity : Number(s)
+})
+const inStock = computed(() => stockQty.value > 0)
+const lowStock = computed(
+  () => stockQty.value !== Infinity && stockQty.value <= 5 && stockQty.value > 0,
+)
+
+// ── Related items ──────────────────────────────────────────────────────────
 const relatedItems = computed(() => {
   const current = product.value
   if (!current) return []
-
   const pool = (productsStore.activeItems || []).filter((p) => String(p.id) !== String(current.id))
-
   const sameCategory = pool.filter(
     (p) => p.category && current.category && p.category === current.category,
   )
@@ -64,25 +117,33 @@ const relatedItems = computed(() => {
       !sameCategory.includes(p),
   )
   const rest = pool.filter((p) => !sameCategory.includes(p) && !sameCollection.includes(p))
-
   return [...sameCategory, ...sameCollection, ...rest].slice(0, 4)
 })
 
-// Normalize images
+// ── Gallery ────────────────────────────────────────────────────────────────
+// Pulls from variant_images when available; falls back to cover image
 const images = computed(() => {
-  const p = product.value || {}
-  const arr =
-    (Array.isArray(p.images) && p.images) || (Array.isArray(p.image_urls) && p.image_urls) || []
-  const normalized = arr.filter(Boolean)
-  if (normalized.length) return normalized
-  return p.image_url ? [p.image_url] : []
+  const v = selectedVariant.value
+  if (v?.variant_images?.length) {
+    return [...v.variant_images]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((img) => img.image_url)
+  }
+  if (v?.image_url) return [v.image_url]
+  const p = product.value ?? {}
+  const arr = Array.isArray(p.images) ? p.images : []
+  return arr.length ? arr : p.image_url ? [p.image_url] : []
 })
 
-// Gallery state
 const activeIndex = ref(0)
 
+// Reset gallery when variant changes
+watch(selectedVariant, () => {
+  activeIndex.value = 0
+})
+
+// Keep index in bounds if image count drops
 watch(images, (imgs) => {
-  // reset when product changes
   if (!imgs?.length) activeIndex.value = 0
   else activeIndex.value = Math.min(activeIndex.value, imgs.length - 1)
 })
@@ -98,32 +159,34 @@ function next() {
   activeIndex.value = (activeIndex.value + 1) % images.value.length
 }
 
-function formatPrice(p) {
-  if (p == null) return ''
-  let amount = 0
-  if (p.price_cents != null) {
-    amount = Number(p.price_cents) / 100
-  } else if (p.price != null) {
-    amount = Number(p.price)
-  }
-  if (isNaN(amount)) return ''
+// ── Pricing ────────────────────────────────────────────────────────────────
+function formatCents(cents) {
+  if (cents == null) return ''
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency: 'EUR',
-    currencyDisplay: 'symbol',
     minimumFractionDigits: 2,
-  }).format(amount)
+  }).format(Number(cents) / 100)
 }
 
+const formattedPrice = computed(() => formatCents(selectedVariant.value?.price_cents))
+
+function fromPrice(item) {
+  const vs = item.product_variants ?? []
+  if (!vs.length) return ''
+  const min = Math.min(...vs.map((v) => v.price_cents).filter((c) => c != null))
+  return `from ${formatCents(min)}`
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────
 function goBack() {
   router.back()
 }
 
 function addToBag() {
-  if (product.value && inStock.value) {
-    cart.add(product.value, quantity.value)
-    quantity.value = 1
-  }
+  if (!selectedVariant.value || !product.value || !inStock.value) return
+  cart.add(selectedVariant.value, product.value, quantity.value)
+  quantity.value = 1
 }
 
 function goToProduct(productId) {
@@ -186,9 +249,44 @@ function goToProduct(productId) {
         <!-- RIGHT: Product info -->
         <div class="pdp-info">
           <div class="pdp-name">{{ product.name }}</div>
-          <div class="pdp-sub">{{ product.material || product.category || '' }}</div>
+          <div class="pdp-sub">{{ product.collection || product.category || '' }}</div>
 
-          <div class="pdp-price">{{ formatPrice(product) }}</div>
+          <!-- Variant selector -->
+          <div v-if="variants.length > 1" class="pdp-variants">
+            <div v-if="hasColorDimension" class="pdp-variant-group">
+              <span class="pdp-variant-label">Material</span>
+              <div class="pdp-variant-options">
+                <button
+                  v-for="color in availableColors"
+                  :key="color"
+                  class="pdp-variant-btn"
+                  :class="{ active: selectedColor === color }"
+                  type="button"
+                  @click="selectedColor = color"
+                >
+                  {{ color }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="hasSizeDimension" class="pdp-variant-group">
+              <span class="pdp-variant-label">Size</span>
+              <div class="pdp-variant-options">
+                <button
+                  v-for="size in availableSizes"
+                  :key="size"
+                  class="pdp-variant-btn"
+                  :class="{ active: selectedSize === size }"
+                  type="button"
+                  @click="selectedSize = size"
+                >
+                  {{ size }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="pdp-price">{{ formattedPrice }}</div>
 
           <!-- Quantity selector -->
           <div class="pdp-qty">
@@ -219,7 +317,9 @@ function goToProduct(productId) {
           <div class="pdp-meta">
             <div class="pdp-meta-item">
               <span class="pdp-meta-label">Material</span>
-              <span class="pdp-meta-value">{{ product.material || 'Fine jewelry' }}</span>
+              <span class="pdp-meta-value">{{
+                selectedVariant?.material_type || 'Fine jewelry'
+              }}</span>
             </div>
             <div class="pdp-meta-item">
               <span class="pdp-meta-label">Collection</span>
@@ -254,10 +354,16 @@ function goToProduct(productId) {
             @click="goToProduct(item.id)"
           >
             <div class="pdp-related-media">
-              <img :src="item.image_url || item.images?.[0] || ''" alt="" class="pdp-related-img" />
+              <img
+                :src="
+                  item.product_variants?.[0]?.image_url || item.image_url || item.images?.[0] || ''
+                "
+                alt=""
+                class="pdp-related-img"
+              />
             </div>
             <div class="pdp-related-name">{{ item.name }}</div>
-            <div class="pdp-related-price">{{ formatPrice(item) }}</div>
+            <div class="pdp-related-price">{{ fromPrice(item) }}</div>
           </article>
         </div>
       </section>
@@ -410,7 +516,59 @@ function goToProduct(productId) {
   border-color: rgba(212, 175, 55, 0.6);
 }
 
-/* ===== Info ===== */
+.pdp-variants {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pdp-variant-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pdp-variant-label {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7a6a59;
+}
+
+.pdp-variant-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pdp-variant-btn {
+  height: 34px;
+  min-width: 52px;
+  padding: 0 14px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: #1a1a1a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pdp-variant-btn:hover {
+  border-color: rgba(0, 0, 0, 0.4);
+}
+
+.pdp-variant-btn.active {
+  border-color: #b8996a;
+  background: rgba(184, 153, 106, 0.08);
+  color: #8a6a3a;
+}
+
+/* ===== Price ===== */
 .pdp-info {
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: linear-gradient(180deg, #fff 0%, #fbfaf8 100%);

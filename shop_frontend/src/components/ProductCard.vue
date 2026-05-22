@@ -70,21 +70,14 @@
 
     <div class="p-body">
       <div class="p-title">{{ product.name }}</div>
-      <div class="p-sub">{{ product.material || ' ' }}</div>
+      <div class="p-sub">{{ firstVariant?.material_type || '&nbsp;' }}</div>
 
       <!-- Price always visible (as you requested) -->
-      <div class="p-price">{{ formatPrice(product) }}</div>
+      <div class="p-price">{{ formattedPrice }}</div>
 
       <!-- Low stock warning -->
-      <div
-        v-if="
-          product.stock_quantity != null &&
-          product.stock_quantity <= 5 &&
-          product.stock_quantity > 0
-        "
-        class="p-stock-warn"
-      >
-        Only {{ product.stock_quantity }} left
+      <div v-if="stockQty != null && stockQty <= 5 && stockQty > 0" class="p-stock-warn">
+        Only {{ stockQty }} left
       </div>
 
       <!-- reserved space: NEVER changes height -->
@@ -125,13 +118,12 @@ const idx = ref(0)
 
 const isWishlisted = computed(() => wishlist.hasProduct(props.product.id))
 
-const inStock = computed(() => {
-  const stock = props.product?.stock_quantity
-  if (stock == null) return true // NULL = unlimited
-  const cartItem = cart.getItem(props.product.id)
-  const inCartQty = cartItem?.quantity ?? 0
-  return stock > inCartQty
-})
+function handleRemove(event) {
+  event.stopPropagation()
+  if (props.onRemove && props.product) {
+    props.onRemove(props.product.id)
+  }
+}
 
 function toggleWishlist(event) {
   event.stopPropagation()
@@ -139,17 +131,19 @@ function toggleWishlist(event) {
 }
 
 const images = computed(() => {
+  const v = firstVariant.value
+  // 1. Use variant_images gallery (populated after migration)
+  if (v?.variant_images?.length) {
+    return [...v.variant_images]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((img) => img.image_url)
+  }
+  // 2. Cover thumbnail only
+  if (v?.image_url) return [v.image_url]
+  // 3. Fallback: product.images array (pre-migration behaviour)
   const p = props.product || {}
-
-  // Try common fields
-  const arr =
-    (Array.isArray(p.images) && p.images) || (Array.isArray(p.image_urls) && p.image_urls) || []
-
-  // Normalize + fallback
-  const normalized = arr.filter(Boolean)
-  if (normalized.length > 0) return normalized
-
-  return p.image_url ? [p.image_url] : []
+  const arr = Array.isArray(p.images) ? p.images.filter(Boolean) : []
+  return arr.length ? arr : p.image_url ? [p.image_url] : []
 })
 
 const hasCarousel = computed(() => images.value.length > 1)
@@ -179,41 +173,47 @@ function onLeave() {
   idx.value = 0 // optional: reset to first image (Cartier-like)
 }
 
-function handleRemove(event) {
-  // stop propagation just in case; ensure clicking X only removes
-  event.stopPropagation()
-  if (props.onRemove && props.product) {
-    props.onRemove(props.product.id)
-  }
-}
-
-// cart logic
-const cart = useCartStore()
 function addToBag(event) {
-  // prevent the card click handler from firing
   event.stopPropagation()
-  if (props.product && inStock.value) {
-    cart.add(props.product)
+  if (!inStock.value) return
+  const activeVariants = (props.product.product_variants ?? []).filter((v) => v.is_active)
+  if (activeVariants.length === 1) {
+    cart.add(activeVariants[0], props.product)
+  } else if (activeVariants.length > 1) {
+    // Multiple variants — send user to product page to choose
+    router.push({ name: 'product', params: { id: props.product.id } })
   }
 }
 
-function formatPrice(p) {
-  if (p == null) return ''
-  // determine numeric euro amount
-  let amount = 0
-  if (p.price_cents != null) {
-    amount = Number(p.price_cents) / 100
-  } else if (p.price != null) {
-    amount = Number(p.price)
-  }
-  if (isNaN(amount)) return ''
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'EUR',
-    currencyDisplay: 'symbol',
-    minimumFractionDigits: 2,
-  }).format(amount)
-}
+const cart = useCartStore()
+
+const firstVariant = computed(
+  () => (props.product.product_variants ?? []).find((v) => v.is_active) ?? null,
+)
+
+const inStock = computed(() => {
+  const v = firstVariant.value
+  if (!v) return false
+  const cartItem = cart.getItem(v.id)
+  return v.stock_quantity > (cartItem?.quantity ?? 0)
+})
+
+const stockQty = computed(() => firstVariant.value?.stock_quantity ?? null)
+
+const formattedPrice = computed(() => {
+  const vs = (props.product.product_variants ?? []).filter((v) => v.is_active)
+  if (!vs.length) return ''
+  const min = Math.min(...vs.map((v) => v.price_cents))
+  const prefix = vs.length > 1 ? 'from ' : ''
+  return (
+    prefix +
+    new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 2,
+    }).format(min / 100)
+  )
+})
 </script>
 
 <style scoped>
