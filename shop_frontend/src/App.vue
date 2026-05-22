@@ -1,6 +1,7 @@
 <template>
   <v-app class="app-shell">
     <v-app-bar
+      v-if="!isAdminRoute"
       ref="appBarEl"
       height="80"
       elevation="0"
@@ -74,16 +75,18 @@
       </div>
     </v-app-bar>
 
-    <v-main class="main-white">
+    <v-main :class="isAdminRoute ? 'main-admin' : 'main-white'">
       <RouterView />
     </v-main>
-    <LuxuryAuthDialog v-model="authDialog" @register="openRegister" />
-    <RegisterDialog v-model="registerDialog" @back="reopenAuth" />
-    <!-- sliding cart drawer -->
-    <CartDrawer />
+    <template v-if="!isAdminRoute">
+      <LuxuryAuthDialog v-model="authDialog" @register="openRegister" />
+      <RegisterDialog v-model="registerDialog" @back="reopenAuth" />
+      <!-- sliding cart drawer -->
+      <CartDrawer />
+      <SearchOverlay v-model="searchOpen" />
+      <MenuDrawer v-model="menuOpen" />
+    </template>
     <ToastBar />
-    <SearchOverlay v-model="searchOpen" />
-    <MenuDrawer v-model="menuOpen" />
   </v-app>
 </template>
 
@@ -121,6 +124,8 @@ watch(
 
 const routerInstance = useRouter()
 const route = useRoute()
+
+const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 const auth = useAuthStore()
 const authDialog = ref(false)
 const registerDialog = ref(false)

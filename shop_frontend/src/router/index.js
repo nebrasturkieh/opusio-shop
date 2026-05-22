@@ -94,24 +94,68 @@ const router = createRouter({
       component: () => import('@/views/ContactView.vue'),
       meta: { title: 'Contact — Opusio' },
     },
+    {
+      path: '/admin',
+      component: () => import('@/views/admin/AdminLayout.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        {
+          path: '',
+          name: 'admin-dashboard',
+          component: () => import('@/views/admin/AdminDashboardView.vue'),
+          meta: { title: 'Dashboard — Admin' },
+        },
+        {
+          path: 'products',
+          name: 'admin-products',
+          component: () => import('@/views/admin/AdminProductsView.vue'),
+          meta: { title: 'Products — Admin' },
+        },
+        {
+          path: 'products/:id',
+          name: 'admin-product-detail',
+          component: () => import('@/views/admin/AdminProductDetailView.vue'),
+          meta: { title: 'Product — Admin' },
+          props: true,
+        },
+        {
+          path: 'orders',
+          name: 'admin-orders',
+          component: () => import('@/views/admin/AdminOrdersView.vue'),
+          meta: { title: 'Orders — Admin' },
+        },
+      ],
+    },
+    {
+      path: '/forbidden',
+      name: 'forbidden',
+      component: () => import('@/views/AdminForbiddenView.vue'),
+      meta: { title: 'Access Denied — Opusio' },
+    },
   ],
 })
 
 // Simple navigation guard example for routes that require auth
 router.beforeEach(async (to) => {
-  // lazy-init auth store when navigation happens
   const auth = useAuthStore()
-  // ensure auth initialized (no-op after first call)
-  if (!auth.user && !auth.loading) {
+  // Always wait for init to complete — it is idempotent after the first call.
+  // The old condition (!auth.user && !auth.loading) skipped init when the user
+  // was already set but the profile had not loaded yet, causing isAdmin to be
+  // false and incorrectly redirecting admins to /forbidden.
+  if (!auth.initialized) {
     try {
       await auth.init()
     } catch {
-      // ignore
+      // ignore — guard proceeds with whatever state is available
     }
   }
 
-  if (to.meta && to.meta.requiresAuth && !auth.isAuthenticated) {
+  if (to.meta?.requiresAuth && !auth.isAuthenticated) {
     return { name: 'auth', query: { redirect: to.fullPath } }
+  }
+
+  if (to.meta?.requiresAdmin && !auth.isAdmin) {
+    return { name: 'forbidden' }
   }
 })
 

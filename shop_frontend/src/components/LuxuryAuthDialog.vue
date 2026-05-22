@@ -162,6 +162,24 @@ function cancelReset() {
   authMessage.value = ''
 }
 
+async function handleSignIn() {
+  authMessage.value = ''
+  try {
+    await auth.signInWithPassword(email.value.trim(), password.value)
+    internalModel.value = false
+    email.value = ''
+    password.value = ''
+  } catch (e) {
+    authMessageType.value = 'error'
+    authMessage.value = e?.message || 'Invalid email or password. Please try again.'
+  }
+}
+
+function createAccount() {
+  internalModel.value = false
+  emit('register')
+}
+
 async function sendReset() {
   authMessage.value = ''
   if (!resetEmail.value.trim()) {
