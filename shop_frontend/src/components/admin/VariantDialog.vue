@@ -68,10 +68,10 @@
           />
         </label>
 
-        <label class="field-label">
-          Cover Image URL
-          <input v-model="form.image_url" class="field-input" placeholder="https://…" />
-        </label>
+        <div class="field-label">
+          Cover Image
+          <ImageUploader v-model="form.image_url" :path-prefix="uploadPathPrefix" />
+        </div>
 
         <label class="field-label">
           Weight (grams)
@@ -131,6 +131,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useAdminStore } from '@/stores/admin'
+import ImageUploader from '@/components/admin/ImageUploader.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -144,6 +145,9 @@ const saving = ref(false)
 const error = ref(null)
 
 const isEdit = computed(() => !!props.variant?.id)
+const uploadPathPrefix = computed(() =>
+  props.variant?.id ? `variants/${props.variant.id}` : 'variants/new',
+)
 
 const defaultForm = () => ({
   sku: '',

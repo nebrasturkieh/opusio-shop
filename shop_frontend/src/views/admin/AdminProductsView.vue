@@ -3,10 +3,30 @@
     <header class="page-header">
       <div>
         <h1 class="page-title">Products</h1>
-        <p class="page-sub">{{ admin.products.length }} products</p>
+        <p class="page-sub">
+          {{ filteredProducts.length }} of {{ admin.products.length }} products
+        </p>
       </div>
       <button class="btn-primary" @click="openCreate">+ New Product</button>
     </header>
+
+    <!-- Search + filter bar -->
+    <div class="filter-bar">
+      <div class="search-wrap">
+        <v-icon size="16" class="search-icon">mdi-magnify</v-icon>
+        <input
+          v-model="searchQuery"
+          class="search-input"
+          placeholder="Search by name, collection, category…"
+          type="search"
+        />
+      </div>
+      <select v-model="statusFilter" class="status-select">
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="draft">Draft</option>
+      </select>
+    </div>
 
     <div v-if="admin.productsLoading" class="loading">Loading…</div>
     <div v-else-if="admin.productsError" class="error">{{ admin.productsError }}</div>
@@ -24,7 +44,16 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="product in admin.products" :key="product.id">
+        <tr v-if="!filteredProducts.length">
+          <td colspan="7" class="empty-row">
+            {{
+              admin.products.length === 0
+                ? "No products yet. Click '+ New Product' to get started."
+                : 'No products match your search.'
+            }}
+          </td>
+        </tr>
+        <tr v-for="product in filteredProducts" :key="product.id">
           <td>
             <img
               v-if="product.image_url || product.images?.[0]"
@@ -62,7 +91,12 @@
               >Manage</router-link
             >
             <button class="btn-ghost" @click="openEdit(product)">Edit</button>
-            <button class="btn-danger" @click="confirmDelete(product)">Delete</button>
+            <button
+              :class="product.is_active ? 'btn-danger' : 'btn-ghost'"
+              @click="toggleActive(product)"
+            >
+              {{ product.is_active ? 'Deactivate' : 'Activate' }}
+            </button>
           </td>
         </tr>
       </tbody>
@@ -70,29 +104,11 @@
 
     <!-- Product dialog (create / edit) -->
     <ProductDialog v-model="dialogOpen" :product="editing" @saved="admin.fetchProducts()" />
-
-    <!-- Delete confirmation dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400" :persistent="false">
-      <div class="confirm-card">
-        <h3 class="confirm-title">Delete Product</h3>
-        <p class="confirm-body">
-          Delete <strong>{{ deleting?.name }}</strong
-          >? This will also delete all its variants and images.
-        </p>
-        <div class="confirm-actions">
-          <button class="btn-ghost" @click="deleteDialog = false">Cancel</button>
-          <button class="btn-danger" :disabled="deleteLoading" @click="doDelete">
-            {{ deleteLoading ? 'Deleting…' : 'Delete' }}
-          </button>
-        </div>
-        <div v-if="deleteError" class="confirm-error">{{ deleteError }}</div>
-      </div>
-    </v-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAdminStore } from '@/stores/admin'
 import ProductDialog from '@/components/admin/ProductDialog.vue'
 
@@ -100,11 +116,25 @@ const admin = useAdminStore()
 
 const dialogOpen = ref(false)
 const editing = ref(null)
+const searchQuery = ref('')
+const statusFilter = ref('all')
 
-const deleteDialog = ref(false)
-const deleting = ref(null)
-const deleteLoading = ref(false)
-const deleteError = ref(null)
+const filteredProducts = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return admin.products.filter((p) => {
+    const matchesStatus =
+      statusFilter.value === 'all' ||
+      (statusFilter.value === 'active' && p.is_active) ||
+      (statusFilter.value === 'draft' && !p.is_active)
+    if (!matchesStatus) return false
+    if (!q) return true
+    return (
+      p.name?.toLowerCase().includes(q) ||
+      p.collection?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q)
+    )
+  })
+})
 
 onMounted(() => admin.fetchProducts())
 
@@ -118,24 +148,8 @@ function openEdit(product) {
   dialogOpen.value = true
 }
 
-function confirmDelete(product) {
-  deleting.value = product
-  deleteError.value = null
-  deleteDialog.value = true
-}
-
-async function doDelete() {
-  if (!deleting.value) return
-  deleteLoading.value = true
-  deleteError.value = null
-  try {
-    await admin.deleteProduct(deleting.value.id)
-    deleteDialog.value = false
-  } catch (e) {
-    deleteError.value = e.message
-  } finally {
-    deleteLoading.value = false
-  }
+async function toggleActive(product) {
+  await admin.updateProduct(product.id, { is_active: !product.is_active })
 }
 </script>
 
@@ -149,7 +163,7 @@ async function doDelete() {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 
 .page-title {
@@ -176,6 +190,67 @@ async function doDelete() {
 
 .error {
   color: #c0392b;
+}
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 380px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9a9087;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  border: 1px solid #e8e2d8;
+  padding: 8px 12px 8px 32px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1a1a1a;
+  background: #faf9f7;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.search-input:focus {
+  border-color: #b8996a;
+}
+
+.status-select {
+  border: 1px solid #e8e2d8;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a1a1a;
+  background: #faf9f7;
+  outline: none;
+  cursor: pointer;
+}
+
+.status-select:focus {
+  border-color: #b8996a;
+}
+
+.empty-row {
+  text-align: center;
+  padding: 40px !important;
+  color: #9a9087;
+  font-size: 13px;
 }
 
 /* Table */

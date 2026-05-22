@@ -48,6 +48,22 @@ export const useAdminStore = defineStore('admin', () => {
     await fetchProducts()
   }
 
+  // ── Storage ───────────────────────────────────────────────────────────────
+  const BUCKET = 'product-images'
+
+  async function uploadImage(file, pathPrefix = 'products') {
+    const ext = file.name.split('.').pop().toLowerCase()
+    const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const path = `${pathPrefix}/${uid}.${ext}`
+    const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+    })
+    if (error) throw error
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+    return data.publicUrl
+  }
+
   // ── Variants ─────────────────────────────────────────────────────────────
   async function createVariant(payload) {
     const { data, error } = await supabase
@@ -199,6 +215,8 @@ export const useAdminStore = defineStore('admin', () => {
     addVariantImage,
     updateVariantImage,
     deleteVariantImage,
+    // storage
+    uploadImage,
     // orders
     orders,
     ordersLoading,

@@ -70,7 +70,12 @@
               <td class="actions">
                 <button class="btn-ghost" @click="openEditVariant(variant)">Edit</button>
                 <button class="btn-ghost" @click="openImages(variant)">Images</button>
-                <button class="btn-danger" @click="confirmDeleteVariant(variant)">Delete</button>
+                <button
+                  :class="variant.is_active ? 'btn-danger' : 'btn-ghost'"
+                  @click="toggleVariantActive(variant)"
+                >
+                  {{ variant.is_active ? 'Deactivate' : 'Activate' }}
+                </button>
               </td>
             </tr>
           </tbody>
@@ -93,24 +98,6 @@
       :variant="imagesVariant"
       @saved="admin.fetchProducts()"
     />
-
-    <!-- Delete variant confirm -->
-    <v-dialog v-model="deleteVariantDialog" max-width="400" :persistent="false">
-      <div class="confirm-card">
-        <h3 class="confirm-title">Delete Variant</h3>
-        <p class="confirm-body">
-          Delete variant <strong>{{ deletingVariant?.sku || deletingVariant?.id }}</strong
-          >? Its images will also be removed.
-        </p>
-        <div class="confirm-actions">
-          <button class="btn-ghost" @click="deleteVariantDialog = false">Cancel</button>
-          <button class="btn-danger" :disabled="deleteVarLoading" @click="doDeleteVariant">
-            {{ deleteVarLoading ? 'Deleting…' : 'Delete' }}
-          </button>
-        </div>
-        <div v-if="deleteVarError" class="confirm-error">{{ deleteVarError }}</div>
-      </div>
-    </v-dialog>
   </div>
 </template>
 
@@ -167,30 +154,8 @@ function openImages(variant) {
   imagesDialogOpen.value = true
 }
 
-// Variant delete
-const deleteVariantDialog = ref(false)
-const deletingVariant = ref(null)
-const deleteVarLoading = ref(false)
-const deleteVarError = ref(null)
-
-function confirmDeleteVariant(variant) {
-  deletingVariant.value = variant
-  deleteVarError.value = null
-  deleteVariantDialog.value = true
-}
-
-async function doDeleteVariant() {
-  if (!deletingVariant.value) return
-  deleteVarLoading.value = true
-  deleteVarError.value = null
-  try {
-    await admin.deleteVariant(deletingVariant.value.id)
-    deleteVariantDialog.value = false
-  } catch (e) {
-    deleteVarError.value = e.message
-  } finally {
-    deleteVarLoading.value = false
-  }
+async function toggleVariantActive(variant) {
+  await admin.updateVariant(variant.id, { is_active: !variant.is_active })
 }
 </script>
 

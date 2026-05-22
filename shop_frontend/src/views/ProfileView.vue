@@ -53,7 +53,9 @@
       <section class="orders-section">
         <h2 class="orders-title">ORDER HISTORY</h2>
 
-        <div v-if="ordersLoading" class="orders-loading">Loading orders...</div>
+        <div v-if="ordersStore.loading" class="orders-loading">Loading orders...</div>
+
+        <div v-else-if="ordersStore.error" class="orders-error">{{ ordersStore.error }}</div>
 
         <div v-else-if="ordersStore.orders.length === 0" class="orders-empty">
           No orders yet. When you place an order it will appear here.
@@ -105,16 +107,13 @@ import ProfileSetup from '@/components/ProfileSetup.vue'
 const auth = useAuthStore()
 const ordersStore = useOrdersStore()
 const isEditing = ref(false)
-const ordersLoading = ref(false)
 
 onMounted(async () => {
   if (!auth.user && !auth.loading) {
     await auth.init()
   }
   if (auth.user) {
-    ordersLoading.value = true
     await ordersStore.fetchOrders(auth.user.id)
-    ordersLoading.value = false
   }
 })
 
@@ -360,6 +359,14 @@ function handleSaved() {
   font-family: 'Lora', 'Georgia', serif;
   font-size: 13px;
   color: #6b5b4a;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.orders-error {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 13px;
+  color: #c0392b;
   padding: 32px 0;
   text-align: center;
 }

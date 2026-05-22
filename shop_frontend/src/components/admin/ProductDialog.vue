@@ -39,10 +39,10 @@
           <input v-model="form.category" class="field-input" placeholder="e.g. Rings" />
         </label>
 
-        <label class="field-label" style="grid-column: 1 / -1">
-          Cover Image URL
-          <input v-model="form.image_url" class="field-input" placeholder="https://…" />
-        </label>
+        <div class="field-label" style="grid-column: 1 / -1">
+          Cover Image
+          <ImageUploader v-model="form.image_url" :path-prefix="uploadPathPrefix" />
+        </div>
 
         <label class="field-label field-check">
           <input type="checkbox" v-model="form.is_active" />
@@ -65,6 +65,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useAdminStore } from '@/stores/admin'
+import ImageUploader from '@/components/admin/ImageUploader.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -77,6 +78,9 @@ const saving = ref(false)
 const error = ref(null)
 
 const isEdit = computed(() => !!props.product?.id)
+const uploadPathPrefix = computed(() =>
+  props.product?.id ? `products/${props.product.id}` : 'products/new',
+)
 
 const defaultForm = () => ({
   name: '',
@@ -89,6 +93,20 @@ const defaultForm = () => ({
 })
 
 const form = ref(defaultForm())
+
+watch(
+  () => form.value.name,
+  (name) => {
+    if (!isEdit.value) {
+      form.value.slug = name
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+    }
+  },
+)
 
 watch(
   () => props.product,

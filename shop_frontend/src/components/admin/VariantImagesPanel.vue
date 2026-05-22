@@ -36,10 +36,10 @@
       <div class="add-form">
         <h3 class="add-title">Add Image</h3>
         <div class="add-grid">
-          <label class="field-label" style="grid-column: 1 / -1">
-            Image URL *
-            <input v-model="newImg.image_url" class="field-input" placeholder="https://…" />
-          </label>
+          <div class="field-label" style="grid-column: 1 / -1">
+            Image *
+            <ImageUploader v-model="newImg.image_url" :path-prefix="uploadPathPrefix" />
+          </div>
           <label class="field-label">
             Alt Text
             <input
@@ -84,6 +84,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useAdminStore } from '@/stores/admin'
+import ImageUploader from '@/components/admin/ImageUploader.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -92,6 +93,10 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'saved'])
 
 const admin = useAdminStore()
+
+const uploadPathPrefix = computed(() =>
+  props.variant?.id ? `variants/${props.variant.id}/gallery` : 'variants/gallery',
+)
 
 const images = computed(() =>
   props.variant

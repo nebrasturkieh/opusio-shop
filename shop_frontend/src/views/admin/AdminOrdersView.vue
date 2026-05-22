@@ -120,6 +120,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAdminStore } from '@/stores/admin'
+import { showToast } from '@/lib/toast'
 
 const admin = useAdminStore()
 const statusFilter = ref('all')
@@ -152,8 +153,9 @@ function countByStatus(s) {
 async function changeStatus(order, newStatus) {
   try {
     await admin.updateOrderStatus(order.id, newStatus)
-  } catch {
-    // Silently keep existing value — Supabase error; user can retry
+    showToast(`Order status updated to "${newStatus}"`, 'success')
+  } catch (e) {
+    showToast(e?.message || 'Failed to update order status', 'error')
   }
 }
 
