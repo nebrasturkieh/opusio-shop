@@ -26,8 +26,13 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
-  async function createOrder({ items, shippingAddress }) {
-    const idempotencyKey = crypto.randomUUID()
+  async function createOrder({ items, shippingAddress, idempotencyKey }) {
+    // The caller (checkout boundary) must generate and own the idempotency
+    // key for its logical checkout attempt. This store never generates one
+    // itself, so a caller bug can't silently create a fresh key per retry.
+    if (typeof idempotencyKey !== 'string' || idempotencyKey.trim() === '') {
+      throw new Error('MISSING_IDEMPOTENCY_KEY')
+    }
     const { data, error: err } = await supabase.rpc('place_order_atomic', {
       p_items: items,
       p_shipping: shippingAddress,

@@ -184,6 +184,13 @@ const submitError = ref('')
 const saveAddress = ref(true)
 const fieldErrors = reactive({})
 
+// One idempotency key per logical checkout attempt. Generated once (below,
+// immediately before the first order request) and reused for every retry of
+// the same attempt so repeated submissions never race with different keys.
+// Only cleared when the user starts a genuinely new attempt (component
+// remount), never in a generic finally block.
+const idempotencyKey = ref(null)
+
 // Pre-fill from profile
 const form = reactive({
   full_name: '',
@@ -284,6 +291,10 @@ function parseOrderError(message) {
 }
 
 async function placeOrder() {
+  // Re-entrancy guard: a second invocation (double-click, double Enter, etc.)
+  // while a request is already in flight must be a no-op.
+  if (placing.value) return
+
   submitError.value = ''
   if (!validate()) return
 
@@ -292,8 +303,17 @@ async function placeOrder() {
     return
   }
 
+  // Set synchronously, before any await, so a second rapid invocation sees
+  // placing === true and returns above instead of starting a second request.
   placing.value = true
+
   try {
+    // Generate the key only once per checkout attempt: the first call creates
+    // it, every retry (failed or uncertain request) reuses the same value.
+    if (!idempotencyKey.value) {
+      idempotencyKey.value = crypto.randomUUID()
+    }
+
     const shippingAddress = {
       full_name: form.full_name,
       phone: form.phone,
@@ -305,6 +325,7 @@ async function placeOrder() {
     const result = await ordersStore.createOrder({
       items: items.value.map((i) => ({ variant_id: i.variant.id, quantity: i.quantity })),
       shippingAddress,
+      idempotencyKey: idempotencyKey.value,
     })
 
     // Optionally persist address back to profile
@@ -320,8 +341,14 @@ async function placeOrder() {
 
     await cart.clear()
     router.push({ name: 'order-confirm', params: { id: result.id } })
+    // Success (including an idempotent: true replay) — the key is left as-is
+    // rather than cleared here, so it cannot be regenerated in the brief
+    // window between this response and navigation/component teardown.
   } catch (e) {
     submitError.value = parseOrderError(e?.message)
+    // Failed or uncertain request: deliberately do NOT clear idempotencyKey.
+    // A retry must reuse it, since the RPC may have already reached the
+    // database even though this response was an error/lost.
   } finally {
     placing.value = false
   }
