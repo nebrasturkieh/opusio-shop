@@ -21,6 +21,25 @@ export const useAuthStore = defineStore('auth', () => {
     return trimmed || null
   }
 
+  // Profile columns a browser client is ever allowed to write. `role` is
+  // intentionally NOT in this list — it must never be inserted or updated
+  // from client code. New profiles rely on the `profiles.role` database
+  // column default ('user'); existing roles are preserved by omitting the
+  // column entirely from write payloads and are ultimately protected by
+  // Supabase RLS (see sql/lock_profiles_role_and_orders_rls.sql).
+  const EDITABLE_PROFILE_FIELDS = ['full_name', 'phone', 'address', 'city', 'country']
+
+  // Builds a safe, allowlisted profile write payload from an arbitrary
+  // source object. Any extra/unexpected keys on `source` (including a
+  // smuggled `role`) are dropped — only the fields above are copied.
+  function pickEditableProfileFields(source = {}) {
+    const result = {}
+    for (const field of EDITABLE_PROFILE_FIELDS) {
+      result[field] = normalizeText(source[field])
+    }
+    return result
+  }
+
   function getProfileSeed(targetUser) {
     const metadata = targetUser?.user_metadata ?? {}
     const firstName = normalizeText(metadata.first_name) ?? ''
@@ -28,9 +47,10 @@ export const useAuthStore = defineStore('auth', () => {
     const fallbackFullName = `${firstName} ${lastName}`.trim()
     const fullName = normalizeText(metadata.full_name) || fallbackFullName || null
 
+    // `role` is intentionally omitted — new profiles rely on the database
+    // column default ('user'), never on client-supplied values.
     return {
       full_name: fullName,
-      role: 'user',
     }
   }
 
@@ -185,14 +205,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function upsertProfile(payload) {
     if (!user.value) throw new Error('No authenticated user')
+    // Allowlist only — `payload` may come from a form (or any caller) and
+    // must never be spread directly into the write row, since that would
+    // let a `role` property (however it got there) reach Supabase.
     const row = {
       id: user.value.id,
-      full_name: normalizeText(payload.full_name),
-      phone: normalizeText(payload.phone),
-      address: normalizeText(payload.address),
-      city: normalizeText(payload.city),
-      country: normalizeText(payload.country),
-      role: payload.role ?? 'user',
+      ...pickEditableProfileFields(payload),
     }
     const { data, error } = await supabase
       .from('profiles')
