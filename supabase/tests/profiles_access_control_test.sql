@@ -47,29 +47,16 @@ SELECT is(
   'authenticated user cannot read another user profile'
 );
 
-UPDATE public.profiles
-SET full_name = 'Updated by Intruder'
-WHERE id = '22222222-2222-4222-8222-222222222222';
-
+WITH updated AS (
+  UPDATE public.profiles
+  SET full_name = 'Updated by Intruder'
+  WHERE id = '22222222-2222-4222-8222-222222222222'
+  RETURNING id
+)
 SELECT is(
-  (
-    SELECT count(*)::bigint
-    FROM public.profiles
-    WHERE id = '22222222-2222-4222-8222-222222222222'
-      AND full_name = 'Updated by Intruder'
-  ),
+  (SELECT count(*)::bigint FROM updated),
   0::bigint,
   'authenticated user cannot update another user profile'
-);
-
-SELECT is(
-  (
-    SELECT full_name
-    FROM public.profiles
-    WHERE id = '22222222-2222-4222-8222-222222222222'
-  ),
-  NULL,
-  'the denied update leaves the other user profile hidden from the ordinary user'
 );
 
 SELECT throws_ok(
@@ -82,17 +69,9 @@ SELECT throws_ok(
   'authenticated user cannot create a profile for another identity'
 );
 
-SELECT is(
-  (
-    SELECT count(*)::bigint
-    FROM public.profiles
-    WHERE id = '44444444-4444-4444-8444-444444444444'
-  ),
-  0::bigint,
-  'no profile row is created for the other identity'
-);
-
 SET LOCAL ROLE anon;
+SET LOCAL request.jwt.claim.sub = '';
+SET LOCAL request.jwt.claim.role = 'anon';
 
 SELECT throws_ok(
   $$
@@ -124,17 +103,34 @@ SELECT is(
   'admin user can read all profiles through the explicit admin-select policy'
 );
 
-UPDATE public.profiles
-SET full_name = 'Changed by Admin'
-WHERE id = '11111111-1111-4111-8111-111111111111';
+SELECT is(
+  (
+    SELECT full_name
+    FROM public.profiles
+    WHERE id = '22222222-2222-4222-8222-222222222222'
+  ),
+  'Other User',
+  'admin sees the other user profile unchanged after the ordinary user denied update'
+);
 
 SELECT is(
   (
     SELECT count(*)::bigint
     FROM public.profiles
-    WHERE id = '11111111-1111-4111-8111-111111111111'
-      AND full_name = 'Changed by Admin'
+    WHERE id = '44444444-4444-4444-8444-444444444444'
   ),
+  0::bigint,
+  'admin confirms the rejected foreign profile was never created'
+);
+
+WITH updated AS (
+  UPDATE public.profiles
+  SET full_name = 'Changed by Admin'
+  WHERE id = '11111111-1111-4111-8111-111111111111'
+  RETURNING id
+)
+SELECT is(
+  (SELECT count(*)::bigint FROM updated),
   0::bigint,
   'admin cannot update another user profile because the update policy does not exist'
 );
